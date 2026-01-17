@@ -11,13 +11,14 @@
 *Powered by LlamaIndex, ChromaDB, Marker-PDF & Ollama.*
 
 [Features](#-features) • [Installation](#-installation) • [Hardware Guide](#-hardware--llm-guide) • [Usage](#-usage)
+
 </div>
 
 ---
 
 ## 🖼️ Interface
 
-<img width="1944" height="1218" alt="Image" src="https://github.com/user-attachments/assets/bc14d1e6-feeb-4b39-bdaa-4b13b29e3927" />
+![Gradio Web Interface](https://github.com/user-attachments/assets/a68432b6-a318-46be-9cc1-dd6385ad75cf)
 
 ## 🚀 Features
 
@@ -87,5 +88,6 @@ doc-retrieval purge
 │   └── ui/              # Gradio App Code
 ├── data/                # Vector Database Storage
 └── pyproject.toml       # Dependencies & Build Config
+```
 
 <div align="center">Made using LlamaIndex & Ollama</div>
