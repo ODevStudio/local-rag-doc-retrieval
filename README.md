@@ -19,7 +19,7 @@
 
 ## Interface
 
-![Gradio Web Interface](https://github.com/user-attachments/assets/a0efd12b-1799-4b1b-83f6-533700db4a6c)
+![Gradio Web Interface](https://github.com/user-attachments/assets/3e139bc6-1657-44d5-af9f-136c2554e2dc)
 
 ## Features
 
