@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "doc-retrieval"
+version = "0.1.0"
+description = "Document retrieval system using local LLMs and vector database"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+
+dependencies = [
+    # Core Framework
+    "llama-index>=0.12.0",
+    "llama-index-llms-ollama>=0.4.0",
+    "llama-index-embeddings-huggingface>=0.4.0",
+    "llama-index-vector-stores-chroma>=0.3.0",
+
+    # Vector Store
+    "chromadb>=0.5.0",
+
+    # Document Processing (marker-pdf for local PDF parsing with OCR support)
+    "marker-pdf[full]>=1.0.0",
+
+    # Embeddings (torch must be installed separately with CUDA support)
+    "sentence-transformers>=3.0.0",
+
+    # CLI
+    "typer[all]>=0.12.0",
+    "rich>=13.0.0",
+
+    # Web UI
+    "gradio>=4.0.0",
+
+    # Configuration
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.5.0",
+]
+
+[project.scripts]
+doc-retrieval = "doc_retrieval.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
