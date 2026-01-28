@@ -1,7 +1,8 @@
 """CLI interface for document retrieval system."""
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -66,7 +67,7 @@ def ingest(
 @app.command()
 def query(
     question: str = typer.Argument(..., help="Question to ask about the documents"),
-    top_k: Optional[int] = typer.Option(None, "--top-k", "-k", help="Number of results to retrieve"),
+    top_k: int | None = typer.Option(None, "--top-k", "-k", help="Number of results to retrieve"),
     no_sources: bool = typer.Option(False, "--no-sources", help="Don't show source documents"),
 ) -> None:
     """Query the document store with a question."""
@@ -83,7 +84,7 @@ def query(
 
 @app.command()
 def interactive(
-    top_k: Optional[int] = typer.Option(None, "--top-k", "-k", help="Number of results to retrieve"),
+    top_k: int | None = typer.Option(None, "--top-k", "-k", help="Number of results to retrieve"),
 ) -> None:
     """Start interactive query mode."""
     engine = RetrievalEngine(top_k=top_k)
@@ -133,7 +134,7 @@ def interactive(
         try:
             result = engine.query(question, show_sources=show_sources)
             engine.display_result(result)
-        except Exception as e:
+        except (ValueError, RuntimeError, ConnectionError, TimeoutError) as e:
             console.print(f"[red]Error: {e}[/red]")
 
         console.print()
@@ -194,11 +195,18 @@ def purge(
             console.print("Cancelled.")
             raise typer.Exit(0)
 
-    persist_dir = Path(settings.chroma_persist_dir)
+    persist_dir = settings.chroma_path
 
     if not persist_dir.exists():
         console.print("[yellow]Database directory does not exist.[/yellow]")
         raise typer.Exit(0)
+
+    # Safety check: refuse to delete system-critical or suspiciously short paths
+    dangerous_paths = {Path("/"), Path("/home"), Path("/etc"), Path("/var"), Path("/usr"), Path("/tmp")}
+    if persist_dir in dangerous_paths or len(persist_dir.parts) <= 2:
+        console.print(f"[red]Error: Refusing to delete '{persist_dir}' -- path looks dangerous.[/red]")
+        console.print("[yellow]Check CHROMA_PERSIST_DIR in your .env file.[/yellow]")
+        raise typer.Exit(1)
 
     try:
         shutil.rmtree(persist_dir)
@@ -229,7 +237,7 @@ def config() -> None:
 
 @app.command()
 def gradio(
-    host: str = typer.Option("0.0.0.0", "--host", "-h", help="Host to bind to"),
+    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host to bind to"),
     port: int = typer.Option(7860, "--port", "-p", help="Port to listen on"),
     share: bool = typer.Option(False, "--share", help="Create a public Gradio link"),
 ) -> None:

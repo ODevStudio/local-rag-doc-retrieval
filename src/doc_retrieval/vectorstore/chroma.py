@@ -1,8 +1,10 @@
 """ChromaDB vector store operations."""
 
+from __future__ import annotations
+
 import gc
+import threading
 from pathlib import Path
-from typing import Optional
 
 import chromadb
 from llama_index.core import StorageContext, VectorStoreIndex
@@ -16,7 +18,8 @@ from ..config import settings
 console = Console()
 
 # Global client instance for connection reuse
-_chroma_client: Optional[chromadb.PersistentClient] = None
+_chroma_client: chromadb.PersistentClient | None = None
+_chroma_lock = threading.Lock()
 
 
 def get_chroma_client(persist_dir: Path) -> chromadb.PersistentClient:
@@ -26,27 +29,33 @@ def get_chroma_client(persist_dir: Path) -> chromadb.PersistentClient:
     which is required for proper file locking on Windows.
     """
     global _chroma_client
-    if _chroma_client is None:
-        # Enable reset to allow clearing all data
-        chroma_settings = chromadb.Settings(
-            persist_directory=str(persist_dir),
-            allow_reset=True,
-            anonymized_telemetry=False,
-        )
-        _chroma_client = chromadb.PersistentClient(
-            path=str(persist_dir),
-            settings=chroma_settings,
-        )
-    return _chroma_client
+    if _chroma_client is not None:
+        return _chroma_client
+    with _chroma_lock:
+        if _chroma_client is None:
+            chroma_settings = chromadb.Settings(
+                persist_directory=str(persist_dir),
+                allow_reset=True,
+                anonymized_telemetry=False,
+            )
+            _chroma_client = chromadb.PersistentClient(
+                path=str(persist_dir),
+                settings=chroma_settings,
+            )
+        return _chroma_client
 
 
 def close_chroma_client() -> None:
-    """Close the global ChromaDB client to allow reinitialization."""
+    """Release the global ChromaDB client to allow reinitialization.
+
+    Note: ChromaDB PersistentClient does not expose an explicit close() method.
+    We clear the reference and trigger garbage collection to release file handles.
+    """
     global _chroma_client
-    if _chroma_client is not None:
-        _chroma_client = None
-        # Help garbage collection clean up resources
-        gc.collect()
+    with _chroma_lock:
+        if _chroma_client is not None:
+            _chroma_client = None
+            gc.collect()
 
 
 class ChromaStore:
@@ -54,8 +63,8 @@ class ChromaStore:
 
     def __init__(
         self,
-        persist_dir: Optional[str | Path] = None,
-        collection_name: Optional[str] = None,
+        persist_dir: str | Path | None = None,
+        collection_name: str | None = None,
     ):
         """Initialize the ChromaDB store.
 
@@ -63,7 +72,7 @@ class ChromaStore:
             persist_dir: Directory for persistent storage. Defaults to settings value.
             collection_name: Name of the collection. Defaults to settings value.
         """
-        self.persist_dir = Path(persist_dir or settings.chroma_persist_dir)
+        self.persist_dir = Path(persist_dir) if persist_dir else settings.chroma_path
         self.collection_name = collection_name or settings.collection_name
 
         # Ensure persist directory exists
@@ -73,7 +82,7 @@ class ChromaStore:
         self.client = get_chroma_client(self.persist_dir)
 
         # Initialize embedding model
-        self._embed_model: Optional[HuggingFaceEmbedding] = None
+        self._embed_model: HuggingFaceEmbedding | None = None
 
     @property
     def embed_model(self) -> HuggingFaceEmbedding:
@@ -128,7 +137,7 @@ class ChromaStore:
         console.print(f"[green]Indexed {len(nodes)} chunk(s) into collection '{self.collection_name}'[/green]")
         return index
 
-    def load_index(self) -> Optional[VectorStoreIndex]:
+    def load_index(self) -> VectorStoreIndex | None:
         """Load an existing index from the vector store.
 
         Returns:
@@ -138,7 +147,11 @@ class ChromaStore:
             collection = self.client.get_collection(name=self.collection_name)
             if collection.count() == 0:
                 return None
-        except Exception:
+        except ValueError:
+            # Collection does not exist yet
+            return None
+        except Exception as e:
+            console.print(f"[red]Error loading index: {e}[/red]")
             return None
 
         vector_store = ChromaVectorStore(chroma_collection=collection)
@@ -159,7 +172,11 @@ class ChromaStore:
         try:
             collection = self.client.get_collection(name=self.collection_name)
             return collection.count()
-        except Exception:
+        except ValueError:
+            # Collection does not exist
+            return 0
+        except Exception as e:
+            console.print(f"[red]Error getting document count: {e}[/red]")
             return 0
 
     def clear(self) -> None:
@@ -179,8 +196,8 @@ class ChromaStore:
             try:
                 self.client.delete_collection(name=self.collection_name)
                 console.print(f"[yellow]Cleared collection '{self.collection_name}'[/yellow]")
-            except Exception:
-                pass
+            except Exception as e2:
+                console.print(f"[red]Error clearing collection: {e2}[/red]")
 
         console.print("[dim]Note: Database files remain but will be reused. To reclaim disk space,[/dim]")
         console.print("[dim]stop the application and delete the data folder manually.[/dim]")

@@ -1,7 +1,8 @@
 """Retrieval engine with Ollama LLM integration."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Optional
 
 from llama_index.core import VectorStoreIndex
 from llama_index.llms.ollama import Ollama
@@ -13,6 +14,8 @@ from ..config import settings
 from ..vectorstore import ChromaStore
 
 console = Console()
+
+MAX_QUERY_LENGTH = 10_000
 
 
 @dataclass
@@ -28,8 +31,8 @@ class RetrievalEngine:
 
     def __init__(
         self,
-        store: Optional[ChromaStore] = None,
-        top_k: Optional[int] = None,
+        store: ChromaStore | None = None,
+        top_k: int | None = None,
     ):
         """Initialize the retrieval engine.
 
@@ -39,8 +42,8 @@ class RetrievalEngine:
         """
         self.store = store or ChromaStore()
         self.top_k = top_k or settings.top_k
-        self._llm: Optional[Ollama] = None
-        self._index: Optional[VectorStoreIndex] = None
+        self._llm: Ollama | None = None
+        self._index: VectorStoreIndex | None = None
 
     @property
     def llm(self) -> Ollama:
@@ -54,7 +57,7 @@ class RetrievalEngine:
         return self._llm
 
     @property
-    def index(self) -> Optional[VectorStoreIndex]:
+    def index(self) -> VectorStoreIndex | None:
         """Get the loaded index."""
         if self._index is None:
             self._index = self.store.load_index()
@@ -80,7 +83,16 @@ class RetrievalEngine:
 
         Raises:
             RuntimeError: If no index is loaded.
+            ValueError: If the question is empty or exceeds MAX_QUERY_LENGTH.
         """
+        if not question or not question.strip():
+            raise ValueError("Question cannot be empty.")
+
+        if len(question) > MAX_QUERY_LENGTH:
+            raise ValueError(
+                f"Question exceeds maximum length of {MAX_QUERY_LENGTH} characters."
+            )
+
         if not self.is_ready():
             raise RuntimeError(
                 "No documents indexed. Run 'doc-retrieval ingest <path>' first."

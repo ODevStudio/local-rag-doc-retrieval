@@ -1,7 +1,9 @@
 """Document processing pipeline for ingestion."""
 
+from __future__ import annotations
+
+import threading
 from pathlib import Path
-from typing import Optional
 
 from llama_index.core import SimpleDirectoryReader
 from llama_index.core.node_parser import SentenceSplitter
@@ -15,16 +17,20 @@ console = Console()
 
 # Lazy load marker models (they take time to initialize)
 _marker_models = None
+_marker_lock = threading.Lock()
 
 
 def get_marker_models():
     """Lazy load marker-pdf models."""
     global _marker_models
-    if _marker_models is None:
-        console.print("[cyan]Loading marker-pdf models (first time may take a while)...[/cyan]")
-        from marker.models import create_model_dict
-        _marker_models = create_model_dict()
-    return _marker_models
+    if _marker_models is not None:
+        return _marker_models
+    with _marker_lock:
+        if _marker_models is None:
+            console.print("[cyan]Loading marker-pdf models (first time may take a while)...[/cyan]")
+            from marker.models import create_model_dict
+            _marker_models = create_model_dict()
+        return _marker_models
 
 
 class DocumentProcessor:
@@ -32,8 +38,8 @@ class DocumentProcessor:
 
     def __init__(
         self,
-        chunk_size: Optional[int] = None,
-        chunk_overlap: Optional[int] = None,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
     ):
         """Initialize the document processor.
 

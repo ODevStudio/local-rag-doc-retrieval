@@ -1,6 +1,8 @@
 """Configuration management for document retrieval system."""
 
+import functools
 from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,7 +27,7 @@ class Settings(BaseSettings):
     # Document processing settings
     chunk_size: int = 512
     chunk_overlap: int = 50
-    supported_extensions: list[str] = [".txt", ".pdf", ".md", ".docx", ".html"]
+    supported_extensions: tuple[str, ...] = (".txt", ".pdf", ".md", ".docx", ".html")
 
     # Vector store settings
     chroma_persist_dir: str = "./data/chroma_db"
@@ -34,11 +36,45 @@ class Settings(BaseSettings):
     # Retrieval settings
     top_k: int = 5
 
+    # Security settings
+    allowed_ingest_dir: str = ""  # Empty means allow any path (CLI-only use)
+    gradio_username: str = ""
+    gradio_password: str = ""
+
     @property
     def chroma_path(self) -> Path:
-        """Get ChromaDB persistence path as Path object."""
-        return Path(self.chroma_persist_dir)
+        """Get ChromaDB persistence path as Path object.
+
+        Relative paths are resolved against the directory containing pyproject.toml
+        (project root), falling back to cwd if not found.
+        """
+        p = Path(self.chroma_persist_dir)
+        if p.is_absolute():
+            return p
+        # Try to find project root by looking for pyproject.toml
+        candidate = Path(__file__).resolve().parent
+        for _ in range(5):
+            if (candidate / "pyproject.toml").exists():
+                return (candidate / p).resolve()
+            candidate = candidate.parent
+        return p.resolve()
 
 
-# Global settings instance
-settings = Settings()
+@functools.lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """Get the application settings (lazily initialized, cached)."""
+    return Settings()
+
+
+class _SettingsProxy:
+    """Proxy that delegates attribute access to the lazily-loaded Settings instance.
+
+    This preserves backward compatibility so existing code using `from .config import settings`
+    continues to work without changes, while deferring Settings() construction until first use.
+    """
+
+    def __getattr__(self, name: str):
+        return getattr(get_settings(), name)
+
+
+settings = _SettingsProxy()
