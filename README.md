@@ -53,7 +53,11 @@ python -m venv venv
 # Activate environment
 source venv/bin/activate    # Linux/Mac
 # venv\Scripts\activate     # Windows
+# Upgrade pip
+pip install --upgrade pip
 
+# Install all dependencies (locked versions)
+pip install -r requirements.txt
 # Install the package
 pip install -e .
 ```
